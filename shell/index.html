@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;" />
+  <title>zerobili</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: #0e0f11;
+      overflow: hidden;
+      font: 12px/1.4 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      color: #e8e9ea;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    body { display: flex; flex-direction: column; }
+
+    /* 标题栏：只有这 40px 是可交互的，下面被 WebContentsView 盖住 */
+    .bar {
+      height: 40px; flex: none;
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 0 0 14px;
+      background: #0e0f11;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      -webkit-app-region: drag;
+    }
+    .bar > * { -webkit-app-region: no-drag; }
+
+    .brand { display: flex; align-items: center; gap: 8px; margin-right: 10px; -webkit-app-region: drag; }
+    .dot {
+      width: 15px; height: 15px; border-radius: 4px; flex: none;
+      background: linear-gradient(135deg, #ff9db4, #6f8cff 55%, #4fd1c5);
+      box-shadow: 0 0 12px rgba(111,140,255,.45);
+    }
+    .name { font-weight: 600; font-size: 12px; letter-spacing: .02em; }
+    .name span { color: #7e838c; font-weight: 400; margin-left: 6px; letter-spacing: .06em; font-size: 10px; }
+
+    .group { display: flex; align-items: center; gap: 2px; }
+
+    button {
+      appearance: none; border: 0; background: transparent; color: #a9aeb6;
+      height: 26px; min-width: 26px; padding: 0 8px; border-radius: 7px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      font: inherit; cursor: pointer; transition: background .12s, color .12s;
+    }
+    button:hover { background: rgba(255,255,255,.08); color: #fff; }
+    button:active { background: rgba(255,255,255,.13); }
+    button:disabled { opacity: .32; pointer-events: none; }
+    svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+    .spacer { flex: 1; -webkit-app-region: drag; height: 100%; }
+
+    .pill {
+      height: 24px; padding: 0 10px; border-radius: 99px;
+      border: 1px solid rgba(255,255,255,.1);
+      color: #8f949c; font-size: 11px; letter-spacing: .02em;
+    }
+    .pill.on {
+      border-color: rgba(79,209,197,.5); color: #7fe3d8;
+      background: rgba(79,209,197,.1);
+    }
+
+    .mem {
+      height: 24px; padding: 0 9px; border-radius: 99px;
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid rgba(255,255,255,.08);
+      color: #8f949c; font-variant-numeric: tabular-nums; font-size: 11px;
+      cursor: default;
+    }
+    .mem i { width: 6px; height: 6px; border-radius: 50%; background: #4fd1c5; display: block; }
+    .mem.warn i { background: #f0b429; }
+    .mem.high { color: #ff8a8a; }
+    .mem.high i { background: #ff6b6b; }
+
+    .winbtns { display: flex; align-items: stretch; margin-left: 4px; height: 40px; }
+    .winbtns button { height: 100%; width: 44px; border-radius: 0; }
+    .winbtns button.close:hover { background: #c42b1c; color: #fff; }
+
+    .fill { flex: 1; background: #0e0f11; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div class="name">zero<span>bili</span></div>
+    </div>
+
+    <div class="group">
+      <button id="back" title="后退 (Alt+←)">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button id="forward" title="前进 (Alt+→)">
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <button id="reload" title="刷新 (Ctrl+R)">
+        <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 6.3"/><path d="M20 5v6h-6"/></svg>
+      </button>
+      <button id="home" title="回到首页">
+        <svg viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 10v9h12v-9"/></svg>
+      </button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <button id="lean" class="pill" title="省内存模式：关闭动态背景与开场动画">省内存</button>
+    <div class="mem" id="mem" title="客户端总内存占用"><i></i><span id="memText">— MB</span></div>
+
+    <div class="winbtns">
+      <button id="min" title="最小化"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button id="max" title="最大化"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
+      <button id="close" class="close" title="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+  <div class="fill"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    $('min').onclick = () => api.minimize();
+    $('max').onclick = () => api.toggleMaximize();
+    $('close').onclick = () => api.close();
+    $('back').onclick = () => api.navigate('back');
+    $('forward').onclick = () => api.navigate('forward');
+    $('reload').onclick = () => api.navigate('reload');
+    $('home').onclick = () => api.navigate('home');
+
+    // 双击标题栏空白处最大化
+    document.querySelector('.bar').addEventListener('dblclick', (e) => {
+      if (e.target.closest('button')) return;
+      api.toggleMaximize();
+    });
+
+    // 内存指示
+    api.onMemory(({ totalMB }) => {
+      const el = $('mem');
+      $('memText').textContent = totalMB + ' MB';
+      el.classList.toggle('warn', totalMB >= 700 && totalMB < 1100);
+      el.classList.toggle('high', totalMB >= 1100);
+      el.title = '客户端总内存占用：' + totalMB + ' MB';
+    });
+
+    // 省内存开关
+    let lean = false;
+    api.getLean().then((v) => {
+      lean = !!v;
+      $('lean').classList.toggle('on', lean);
+    });
+    $('lean').onclick = async () => {
+      lean = !lean;
+      $('lean').classList.toggle('on', lean);
+      await api.setLean(lean);
+    };
+
+    api.onWinState(({ maximized }) => {
+      $('max').title = maximized ? '还原' : '最大化';
+    });
+  </script>
+</body>
+</html>

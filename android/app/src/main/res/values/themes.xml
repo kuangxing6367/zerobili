@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="zb_bg">#0A0A0B</color>
+    <color name="zb_gold">#E8C46A</color>
+
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/zb_bg</item>
+        <item name="android:statusBarColor">@color/zb_bg</item>
+        <item name="android:navigationBarColor">@color/zb_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">@color/zb_gold</item>
+    </style>
+</resources>
