@@ -10,8 +10,8 @@
 
 | 平台 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows | [`zerobili-0.1.0-setup.exe`](../../releases/latest) | Windows 10 / 11 x64 |
-| Android | [`zerobili-0.1.0-android.apk`](../../releases/latest) | Android 8.0+（minSdk 26） |
+| Windows | [`zerobili-0.1.0-setup.exe`](https://github.com/kuangxing6367/zerobili/releases/latest) | Windows 10 / 11 x64 |
+| Android | [`zerobili-0.1.0-android.apk`](https://github.com/kuangxing6367/zerobili/releases/latest) | Android 8.0+（minSdk 26） |
 
 Windows 安装包没有代码签名，SmartScreen 会提示「未知发布者」，点「更多信息 → 仍要运行」即可。Android 包用的是 debug 证书签的，装得上、能升级，但**不适合上应用商店**（换签名要卸载重装）。
 
@@ -59,7 +59,7 @@ Windows 安装包没有代码签名，SmartScreen 会提示「未知发布者」
 | 场景 | 总内存 | 构成 |
 | --- | --- | --- |
 | 原版 B 站首页（无 MARGIN） | 749 MB | 渲染 348 MB |
-| zerobili 首页 | **约 550–590 MB** | Browser 113 / GPU 169 / Utility 54 / 壳 82 / B站页 168 |
+| zerobili 首页 | **586 MB** | Browser 113 / GPU 169 / Utility 54 / 壳 82 / B站页 168 |
 | 播放页 | 约 1030 MB | 视频解码 + 弹幕，原生播放器 |
 
 首页省下约 200 MB，两个来源：MARGIN 的 `native-guard` 在 `document_start` 拦掉原版脚本（节点数 1482 → 640），以及 3D 背景不再常驻 GPU 上下文。
