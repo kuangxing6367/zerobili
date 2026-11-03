@@ -1,6 +1,6 @@
 {
   "name": "zerobili",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "把映间 MARGIN 装进桌面壳与 Android WebView 的 B 站客户端",
   "author": "zc team",
@@ -44,7 +44,8 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "artifactName": "zerobili-${version}-setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
