@@ -394,15 +394,26 @@ function createWindow(startUrlOverride) {
     },
   });
   win.zbView = view;
+  // 铺深色底：WebContentsView 默认白底，页面渲染出来之前会闪一段白页。
+  // 底色与壳一致，加载期观感是"深色渐入"而不是"白闪"。
+  try {
+    view.setBackgroundColor('#0e0f11');
+  } catch {
+    /* 个别平台不支持则忽略，仅影响加载期观感 */
+  }
 
   win.contentView.addChildView(view);
   layout(win);
 
   // 诊断：页面加载链路
   const wc = view.webContents;
-  wc.on('did-start-loading', () => log('[nav] start loading'));
+  wc.on('did-start-loading', () => {
+    log('[nav] start loading');
+    if (!win.webContents.isDestroyed()) win.webContents.send('app:loading', true);
+  });
   wc.on('did-stop-loading', () => {
     log('[nav] stop loading');
+    if (!win.webContents.isDestroyed()) win.webContents.send('app:loading', false);
     // 记住当前页，供「恢复上次页面」使用（每个窗口各自记住最后访问页）
     const u = wc.getURL();
     if (u && /^https?:\/\//.test(u)) {
@@ -433,11 +444,12 @@ function createWindow(startUrlOverride) {
   const startupUrl = startUrlOverride || (zbCfg.restoreLast && zbCfg.lastUrl ? zbCfg.lastUrl : BILI_HOME);
   view.webContents.loadURL(startupUrl);
 
-  // 多窗口核心：window.open / target=_blank 在客户端内打开一个真正的新窗口，
-  // 而不是把当前唯一视图替换掉。站外链接丢给系统浏览器。
+  // window.open / target=_blank：一律在当前视图内导航，不另开 web。
+  // 弹新窗口 = 常驻第二个 B 站渲染进程，观感像弹窗、内存翻倍，关掉还容易残在后台；
+  // 真需要并排时用标题栏的「+ 新窗口」显式开。站外链接丢给系统浏览器。
   view.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\/([\w-]+\.)*(bilibili\.com|hdslb\.com|biliapi\.net)/.test(url)) {
-      createWindow(url);
+      view.webContents.loadURL(url);
     } else if (/^https?:\/\//.test(url)) {
       shell.openExternal(url);
     }
@@ -555,10 +567,19 @@ function createWindow(startUrlOverride) {
     });
   }
 
-  // 关闭时回收
+  // 关闭时回收：必须显式销毁内容 webContents。
+  // 只解引用的话，渲染进程会跟着残留（网页关了仍挂在后台、内存不掉）。
   win.on('closed', () => {
     windows.delete(win);
+    const v = win.zbView;
     win.zbView = null;
+    if (v) {
+      try {
+        if (!v.webContents.isDestroyed()) v.webContents.close();
+      } catch (e) {
+        log('[close] 内容视图销毁失败', String(e));
+      }
+    }
   });
 
   return win;

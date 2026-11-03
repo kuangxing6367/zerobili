@@ -104,6 +104,19 @@
     .danger:hover { background: rgba(255,107,107,.16); }
     .danger:active { background: rgba(255,107,107,.24); }
     .hint { font-size: 10px; color: #5b606a; line-height: 1.4; border-top: 1px solid rgba(255,255,255,.06); padding-top: 8px; }
+
+    /* 加载进度条：贴在标题栏底边，页面加载中走一段流光，消除"空白等待"的观感 */
+    .loadbar {
+      position: absolute; top: 39px; left: 0; right: 0; height: 2px;
+      overflow: hidden; opacity: 0; transition: opacity .18s; pointer-events: none;
+    }
+    .loadbar.on { opacity: 1; }
+    .loadbar::after {
+      content: ''; position: absolute; top: 0; bottom: 0; width: 38%;
+      background: linear-gradient(90deg, transparent, #6f8cff, #4fd1c5, transparent);
+      animation: loadsweep 1s linear infinite;
+    }
+    @keyframes loadsweep { from { left: -40%; } to { left: 105%; } }
   </style>
 </head>
 <body>
@@ -153,6 +166,7 @@
       <div class="hint">设置仅作用于本机 zerobili，不影响浏览器中的 B 站。</div>
     </div>
   </div>
+  <div class="loadbar" id="loadbar"></div>
   <div class="fill"></div>
 
   <script>
@@ -181,6 +195,9 @@
       el.classList.toggle('high', totalMB >= 1100);
       el.title = '客户端总内存占用：' + totalMB + ' MB';
     });
+
+    // 加载进度条：内容视图加载期间给一条流光，替代"空白等待"
+    api.onLoading((on) => $('loadbar').classList.toggle('on', !!on));
 
     // 省内存开关
     let lean = false;

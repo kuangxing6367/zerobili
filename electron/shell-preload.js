@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   getLean: () => ipcRenderer.invoke('app:get-lean'),
   setLean: (on) => ipcRenderer.invoke('app:set-lean', on),
   onMemory: (cb) => ipcRenderer.on('app:memory-tick', (_e, data) => cb(data)),
+  onLoading: (cb) => ipcRenderer.on('app:loading', (_e, on) => cb(on)),
   onWinState: (cb) => ipcRenderer.on('app:win-state', (_e, data) => cb(data)),
   getSetting: (key) => ipcRenderer.invoke('app:get-setting', key),
   setSetting: (key, val) => ipcRenderer.invoke('app:set-setting', key, val),
