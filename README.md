@@ -10,8 +10,8 @@
 
 | 平台 | 文件 | 要求 |
 | --- | --- | --- |
-| Windows | [`zerobili-0.1.1-setup.exe`](https://github.com/kuangxing6367/zerobili/releases/latest) | Windows 10 / 11 x64 |
-| Android | [`zerobili-0.1.1-android.apk`](https://github.com/kuangxing6367/zerobili/releases/latest) | Android 8.0+（minSdk 26） |
+| Windows | [`zerobili-0.1.2-setup.exe`](https://github.com/kuangxing6367/zerobili/releases/latest) | Windows 10 / 11 x64 |
+| Android | [`zerobili-0.1.2-android.apk`](https://github.com/kuangxing6367/zerobili/releases/latest) | Android 8.0+（minSdk 26） |
 
 Windows 安装包没有代码签名，SmartScreen 会提示「未知发布者」，点「更多信息 → 仍要运行」即可。Android 包用的是 debug 证书签的，装得上、能升级，但**不适合上应用商店**（换签名要卸载重装）。
 
