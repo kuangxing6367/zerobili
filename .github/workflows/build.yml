@@ -1,0 +1,68 @@
+name: Build zerobili
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一分支/标签的重复触发只保留最新一次
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows (electron-builder)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package (NSIS installer)
+        run: npm run dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zerobili-windows
+          path: release/*.exe
+          if-no-files-found: error
+
+  android:
+    name: Android (gradle wrapper)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.1.0"
+
+      - name: Build release APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease --no-daemon --console=plain
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zerobili-android
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

@@ -85,6 +85,30 @@ public class MainActivity extends Activity {
                     + "return 'patched';"
                     + "})()";
 
+    /** 竖屏补丁：PC 站硬塞进窄屏时字太小。竖屏下把卡片改 2 列并放大字号，横屏还原。 */
+    private static final String PORTRAIT_PATCH_JS =
+            "(function(){"
+                    + "var r=document.getElementById('margin-root');"
+                    + "if(!r||!r.shadowRoot) return 'no-root';"
+                    + "var root=r.shadowRoot;"
+                    + "function apply(){"
+                    + "  var st=root.getElementById('zb-portrait');"
+                    + "  if(!st){st=document.createElement('style');st.id='zb-portrait';root.appendChild(st);}"
+                    + "  if(window.innerHeight>window.innerWidth){"
+                    + "    st.textContent='.home-grid{grid-template-columns:repeat(2,1fr)!important;gap:14px!important}'"
+                    + "      +'.card{font-size:16px!important}'"
+                    + "      +'.card .title{font-size:16px!important;line-height:1.45!important}'"
+                    + "      +'.card .meta{font-size:13px!important}'"
+                    + "      +'.card .dur,.card .reason{font-size:12px!important}';"
+                    + "    return 'portrait';"
+                    + "  } else { st.textContent=''; return 'landscape'; }"
+                    + "}"
+                    + "if(!window.__zbPortrait){window.__zbPortrait=true;"
+                    + "  window.addEventListener('resize',apply);"
+                    + "  window.addEventListener('orientationchange',function(){setTimeout(apply,200)});}"
+                    + "return apply();"
+                    + "})()";
+
     private FrameLayout root;
     private WebView web;
     private View fab;
@@ -374,6 +398,7 @@ public class MainActivity extends Activity {
                 "console.log('[zb] margin-root=' + !!document.getElementById('margin-root')"
                         + " + ' nodes=' + document.querySelectorAll('*').length)", null), 1200);
         ui.postDelayed(() -> view.evaluateJavascript(MOBILE_PATCH_JS, null), 900);
+        ui.postDelayed(() -> view.evaluateJavascript(PORTRAIT_PATCH_JS, null), 1000);
     }
 
     // ---------------------------------------------------------------- assets
