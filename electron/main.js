@@ -6,7 +6,9 @@
  *    因此原样成立，播放器 / 登录 / 弹幕全部走 B 站原生能力。
  * 2. MARGIN 是扩展，靠 chrome.* 运行。这里用 preload 提供一套最小 shim，
  *    把 storage 落到本地 JSON，把扩展资源挂到 margin:// 自定义协议。
- * 3. 内存：单窗口复用、页面线程上限、后台节流、首次启动关掉 shader 背景与开场动画。
+ * 3. 多窗口：每个被打开的页面都是一个独立的 BrowserWindow（自带标题栏 + 内容视图），
+ *    共享 persist:bili 分区（登录态互通）。window.open 不再被吞掉。
+ * 4. 内存：单窗口复用、后台节流、首次启动关掉 shader 背景与开场动画。
  */
 const { app, BrowserWindow, WebContentsView, protocol, session, ipcMain, shell, Menu, net } = require('electron');
 const path = require('node:path');
@@ -51,7 +53,7 @@ const log = (...args) => {
   }
 };
 
-// 内容视图的会话分区（持久化登录态）
+// 内容视图的会话分区（持久化登录态，所有窗口共用）
 const PARTITION = 'persist:bili';
 
 // ---------------------------------------------------------------- 内存相关开关
@@ -59,7 +61,6 @@ const PARTITION = 'persist:bili';
 // MARGIN_PROFILE 用于对照实验，不设则用 lean（默认）。
 const PROFILE = process.env.MARGIN_PROFILE || 'lean';
 
-app.commandLine.appendSwitch('renderer-process-limit', '3');
 // 关闭 Electron 默认的开发者工具扩展宿主，省一个常驻进程
 app.commandLine.appendSwitch('disable-extensions');
 
@@ -104,10 +105,11 @@ if (PROFILE === 'base') {
 
 app.commandLine.appendSwitch('disable-background-timer-throttling', 'false');
 
+// 多窗口登记：保存所有 BrowserWindow 实例，便于广播与回收
+const windows = new Set();
+
 const TITLEBAR_HEIGHT = 40;
 
-let win = null;
-let view = null;
 let memTimer = null;
 
 // ---------------------------------------------------------------- 存储（模拟 chrome.storage.local）
@@ -152,8 +154,11 @@ function pick(keys) {
 
 function broadcast(changes) {
   if (!Object.keys(changes).length) return;
-  for (const wc of [win?.webContents, view?.webContents]) {
-    if (wc && !wc.isDestroyed()) wc.send('chrome:storage-changed', changes, 'local');
+  for (const w of windows) {
+    if (w.isDestroyed()) continue;
+    if (!w.webContents.isDestroyed()) w.webContents.send('chrome:storage-changed', changes, 'local');
+    const v = w.zbView;
+    if (v && !v.webContents.isDestroyed()) v.webContents.send('chrome:storage-changed', changes, 'local');
   }
 }
 
@@ -257,6 +262,7 @@ function registerMarginProtocol(ses) {
  * 仍然可以自己开回来（页内设置写的是同一份 storage，会覆盖这里）。
  */
 const SETTINGS_KEY = 'margin:settings';
+const ZB_KEY = 'zb'; // zerobili 壳自身设置：restoreLast / privacy / lastUrl
 const LEAN_DEFAULTS = {
   bg: { mode: 'off', shader: 'aurora', intensity: 0.6 },
   intro: false,
@@ -281,7 +287,10 @@ ipcMain.handle('app:set-lean', (_e, on) => {
   persistSoon();
   broadcast({ [SETTINGS_KEY]: { oldValue, newValue: next } });
   // 页内模块收到 onChanged 会自己更新；背景类改动需要重载才彻底释放
-  if (view && !view.webContents.isDestroyed()) view.webContents.reload();
+  for (const w of windows) {
+    const v = w.zbView;
+    if (v && !v.webContents.isDestroyed()) v.webContents.reload();
+  }
   return true;
 });
 
@@ -309,9 +318,38 @@ function memorySnapshot() {
 
 ipcMain.handle('app:memory', () => memorySnapshot());
 
+// zerobili 壳自身设置（与 MARGIN 的 margin:settings 分开存）
+ipcMain.handle('app:get-setting', (_e, key) => (store[ZB_KEY] || {})[key]);
+ipcMain.handle('app:set-setting', (_e, key, val) => {
+  const cfg = store[ZB_KEY] || {};
+  cfg[key] = val;
+  store[ZB_KEY] = cfg;
+  persistSoon();
+  return true;
+});
+ipcMain.handle('app:clear-auth', async () => {
+  // 清理登录态：分区内的 cookie / 本地存储全清，重启后回到未登录
+  const ses = session.fromPartition(PARTITION);
+  await ses.clearStorageData({
+    storages: ['cookies', 'local_storage', 'session_storage', 'indexed_db'],
+  });
+  return true;
+});
+
+/** 由壳页面请求：再开一个独立窗口（新窗口按钮） */
+ipcMain.on('app:new-window', () => createWindow(BILI_HOME));
+
 // ---------------------------------------------------------------- 窗口
-function createWindow() {
-  win = new BrowserWindow({
+/**
+ * 每个窗口 = 一个 BrowserWindow（标题栏壳） + 一个 WebContentsView（B 站内容）。
+ * 窗口实例上挂 zbView / zbTitleExtra 两个字段，IPC 处理时通过 event.sender 反查所属窗口。
+ */
+function windowOf(sender) {
+  return BrowserWindow.fromWebContents(sender);
+}
+
+function createWindow(startUrlOverride) {
+  const win = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1024,
@@ -327,6 +365,8 @@ function createWindow() {
       sandbox: false,
     },
   });
+  win.zbTitleExtra = 0;
+  windows.add(win);
 
   const shellFile = path.join(__dirname, '..', 'shell', 'index.html');
   if (!fs.existsSync(shellFile)) {
@@ -341,7 +381,7 @@ function createWindow() {
   win.webContents.on('console-message', (_e, level, message) => log('[shell console]', String(message).slice(0, 200)));
   win.webContents.on('preload-error', (_e, p, err) => log('[shell] preload error', String(err)));
 
-  view = new WebContentsView({
+  const view = new WebContentsView({
     webPreferences: {
       preload: process.argv.includes('--no-margin') ? undefined : path.join(__dirname, 'preload.js'),
       contextIsolation: false, // 与页面同世界，等价于 content script 的运行环境
@@ -353,14 +393,25 @@ function createWindow() {
       partition: PARTITION,
     },
   });
+  win.zbView = view;
 
   win.contentView.addChildView(view);
-  layout();
+  layout(win);
 
   // 诊断：页面加载链路
   const wc = view.webContents;
   wc.on('did-start-loading', () => log('[nav] start loading'));
-  wc.on('did-stop-loading', () => log('[nav] stop loading'));
+  wc.on('did-stop-loading', () => {
+    log('[nav] stop loading');
+    // 记住当前页，供「恢复上次页面」使用（每个窗口各自记住最后访问页）
+    const u = wc.getURL();
+    if (u && /^https?:\/\//.test(u)) {
+      const cfg = store[ZB_KEY] || {};
+      cfg.lastUrl = u;
+      store[ZB_KEY] = cfg;
+      persistSoon();
+    }
+  });
   wc.on('did-finish-load', () => log('[nav] finish load', wc.getURL()));
   wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) =>
     log('[nav] fail', { code, desc, url, isMainFrame })
@@ -378,31 +429,29 @@ function createWindow() {
     `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVer} Safari/537.36`
   );
 
-  view.webContents.loadURL(BILI_HOME);
+  const zbCfg = store[ZB_KEY] || {};
+  const startupUrl = startUrlOverride || (zbCfg.restoreLast && zbCfg.lastUrl ? zbCfg.lastUrl : BILI_HOME);
+  view.webContents.loadURL(startupUrl);
 
+  // 多窗口核心：window.open / target=_blank 在客户端内打开一个真正的新窗口，
+  // 而不是把当前唯一视图替换掉。站外链接丢给系统浏览器。
   view.webContents.setWindowOpenHandler(({ url }) => {
-    // 站内链接留在客户端，站外丢给系统浏览器
     if (/^https?:\/\/([\w-]+\.)*(bilibili\.com|hdslb\.com|biliapi\.net)/.test(url)) {
-      view.webContents.loadURL(url);
-    } else {
+      createWindow(url);
+    } else if (/^https?:\/\//.test(url)) {
       shell.openExternal(url);
     }
     return { action: 'deny' };
   });
 
   // 避免误触整页拖拽 / 右键菜单缺失
-  win.on('resize', layout);
+  win.on('resize', () => layout(win));
   win.once('ready-to-show', () => win.show());
 
-  win.on('maximize', () => sendWinState());
-  win.on('unmaximize', () => sendWinState());
+  win.on('maximize', () => win.webContents.send('app:win-state', { maximized: true }));
+  win.on('unmaximize', () => win.webContents.send('app:win-state', { maximized: false }));
 
   if (IS_DEV) view.webContents.openDevTools({ mode: 'detach' });
-
-  memTimer = setInterval(() => {
-    if (!win || win.isDestroyed()) return;
-    win.webContents.send('app:memory-tick', memorySnapshot());
-  }, 2000);
 
   // --snapshot：自检模式，等页面稳定后抓图 + 输出分进程内存，然后退出。
   // 打包后的 exe 不能用命令行开关：Chromium 先解析 argv，遇到不认识的 --xxx 会直接
@@ -459,6 +508,8 @@ function createWindow() {
                 barBox: b ? Math.round(b.width) + 'x' + Math.round(b.height) : null,
                 winButtons: btns.length,
                 closeExists: !!document.getElementById('close'),
+                settingsBtn: !!document.getElementById('settingsBtn'),
+                settingsPanel: !!document.getElementById('settingsPanel'),
                 bodyBg: getComputedStyle(document.body).backgroundColor,
                 docHeight: document.documentElement.scrollHeight,
               };
@@ -504,47 +555,61 @@ function createWindow() {
     });
   }
 
-  // 关闭时清理
+  // 关闭时回收
   win.on('closed', () => {
-    if (memTimer) clearInterval(memTimer);
-    memTimer = null;
-    win = null;
-    view = null;
+    windows.delete(win);
+    win.zbView = null;
   });
+
+  return win;
 }
 
-function layout() {
+function layout(win) {
+  const view = win.zbView;
   if (!win || !view) return;
   const { width, height } = win.getContentBounds();
+  const extra = win.zbTitleExtra || 0;
   view.setBounds({
     x: 0,
-    y: TITLEBAR_HEIGHT,
+    y: TITLEBAR_HEIGHT + extra,
     width,
-    height: Math.max(0, height - TITLEBAR_HEIGHT),
+    height: Math.max(0, height - TITLEBAR_HEIGHT - extra),
   });
-}
-
-function sendWinState() {
-  if (!win) return;
-  win.webContents.send('app:win-state', { maximized: win.isMaximized() });
 }
 
 // ---------------------------------------------------------------- 窗口控制 IPC
-ipcMain.on('win:minimize', () => win?.minimize());
-ipcMain.on('win:toggle-maximize', () => {
-  if (!win) return;
-  win.isMaximized() ? win.unmaximize() : win.maximize();
+ipcMain.on('win:minimize', (e) => {
+  const w = windowOf(e.sender);
+  w?.minimize();
 });
-ipcMain.on('win:close', () => win?.close());
-ipcMain.on('win:navigate', (_e, action) => {
-  if (!view) return;
-  const wc = view.webContents;
+ipcMain.on('win:toggle-maximize', (e) => {
+  const w = windowOf(e.sender);
+  if (!w) return;
+  w.isMaximized() ? w.unmaximize() : w.maximize();
+});
+ipcMain.on('win:close', (e) => {
+  const w = windowOf(e.sender);
+  w?.close();
+});
+ipcMain.on('win:set-panel', (e, h) => {
+  const w = windowOf(e.sender);
+  if (!w) return;
+  w.zbTitleExtra = Math.max(0, Math.floor(Number(h) || 0));
+  layout(w);
+});
+ipcMain.on('win:navigate', (e, action) => {
+  const w = windowOf(e.sender);
+  const wc = w && w.zbView && w.zbView.webContents;
+  if (!wc) return;
   if (action === 'back' && wc.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
   if (action === 'forward' && wc.navigationHistory.canGoForward()) wc.navigationHistory.goForward();
   if (action === 'reload') wc.reload();
   if (action === 'home') wc.loadURL(BILI_HOME);
 });
-ipcMain.handle('win:state', () => ({ maximized: !!win?.isMaximized() }));
+ipcMain.handle('win:state', (e) => {
+  const w = windowOf(e.sender);
+  return { maximized: !!(w && w.isMaximized()) };
+});
 
 // ---------------------------------------------------------------- 会话配置
 function configureSession() {
@@ -589,9 +654,17 @@ function flushOnQuit() {
     }
   }
   try {
-    session.fromPartition(PARTITION).cookies.flushStore().catch(() => {});
+    const ses = session.fromPartition(PARTITION);
+    if ((store[ZB_KEY] || {}).privacy) {
+      // 隐私模式：退出即焚，不保留登录态与本地数据
+      ses.clearStorageData({
+        storages: ['cookies', 'local_storage', 'session_storage', 'indexed_db'],
+      }).catch(() => {});
+    } else {
+      ses.cookies.flushStore().catch(() => {});
+    }
   } catch (e) {
-    log('[quit] cookie 刷盘失败', String(e));
+    log('[quit] cookie 处理失败', String(e));
   }
 }
 app.on('before-quit', flushOnQuit);
@@ -602,9 +675,15 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.focus();
+    // 已有一个进程在跑：聚焦到最前面的窗口（不重复拉起进程）
+    let top = null;
+    for (const w of windows) if (!w.isDestroyed() && (!top || w.isVisible())) top = w;
+    if (top) {
+      if (top.isMinimized()) top.restore();
+      top.focus();
+    } else {
+      createWindow();
+    }
   });
 
   app.whenReady().then(() => {
@@ -613,6 +692,14 @@ if (!gotLock) {
     seedLeanDefaults();
     configureSession();
     createWindow();
+
+    // 全局内存心跳：广播到所有窗口
+    memTimer = setInterval(() => {
+      const snap = memorySnapshot();
+      for (const w of windows) {
+        if (!w.isDestroyed() && !w.webContents.isDestroyed()) w.webContents.send('app:memory-tick', snap);
+      }
+    }, 2000);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

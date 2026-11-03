@@ -38,6 +38,10 @@ Windows 安装包没有代码签名，SmartScreen 会提示「未知发布者」
 | 注入时机 | preload + `webFrame.executeJavaScript` | `evaluateJavascript` 轮询 `documentElement` |
 | 外壳 | 自绘 40px 标题栏 | 无标题栏 + 悬浮菜单 |
 
+## 多窗口
+
+站内的链接、中键点击、MARGIN 的「开新页面」都会开一个**独立窗口**——每个窗口自带标题栏与内容视图，登录态通过 `persist:bili` 分区互通，所以新窗口不用重新登录。标题栏的 `+` 也能手动开新窗口。多窗口各自后台节流，关闭最后一个窗口即退出。
+
 ## 对 MARGIN 做的改造
 
 不只是套壳，插件本体也做了减法：

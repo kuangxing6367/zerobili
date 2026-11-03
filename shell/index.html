@@ -79,6 +79,31 @@
     .winbtns button.close:hover { background: #c42b1c; color: #fff; }
 
     .fill { flex: 1; background: #0e0f11; }
+
+    /* 设置面板：浮在标题栏正下方，主视图会为它下移避让 */
+    .panel {
+      position: absolute; top: 40px; right: 8px; width: 290px;
+      display: none; flex-direction: column; gap: 11px;
+      padding: 14px; border-radius: 12px;
+      background: rgba(22,24,28,.97);
+      border: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 12px 40px rgba(0,0,0,.5);
+      z-index: 10; -webkit-app-region: no-drag;
+    }
+    .panel.show { display: flex; }
+    .panel * { -webkit-app-region: no-drag; }
+    .panel-h { font-size: 12px; font-weight: 600; color: #e8e9ea; letter-spacing: .02em; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: #c7cad0; }
+    .row small { display: block; color: #6f747c; font-size: 10px; margin-top: 2px; max-width: 178px; line-height: 1.3; }
+    .row > span { flex: 1; }
+    .switch { position: relative; width: 36px; height: 20px; flex: none; border-radius: 99px; background: rgba(255,255,255,.12); cursor: pointer; transition: background .15s; }
+    .switch.on { background: #4fd1c5; }
+    .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+    .switch.on::after { transform: translateX(16px); }
+    .danger { height: 28px; padding: 0 12px; border-radius: 7px; border: 1px solid rgba(255,107,107,.4); color: #ff9a9a; background: rgba(255,107,107,.08); font-size: 12px; }
+    .danger:hover { background: rgba(255,107,107,.16); }
+    .danger:active { background: rgba(255,107,107,.24); }
+    .hint { font-size: 10px; color: #5b606a; line-height: 1.4; border-top: 1px solid rgba(255,255,255,.06); padding-top: 8px; }
   </style>
 </head>
 <body>
@@ -101,17 +126,31 @@
       <button id="home" title="回到首页">
         <svg viewBox="0 0 24 24"><path d="M4 10.5L12 4l8 6.5"/><path d="M6 10v9h12v-9"/></svg>
       </button>
+      <button id="newwin" title="新建窗口 (Ctrl+N)">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
     </div>
 
     <div class="spacer"></div>
 
     <button id="lean" class="pill" title="省内存模式：关闭动态背景与开场动画">省内存</button>
     <div class="mem" id="mem" title="客户端总内存占用"><i></i><span id="memText">— MB</span></div>
+    <button id="settingsBtn" title="设置">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+    </button>
 
     <div class="winbtns">
       <button id="min" title="最小化"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
       <button id="max" title="最大化"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
       <button id="close" class="close" title="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+
+    <div class="panel" id="settingsPanel">
+      <div class="panel-h">设置</div>
+      <div class="row"><span>记住上次页面<small>重启后回到关闭前的页面</small></span><div class="switch" id="swRestore" role="switch" aria-checked="false"></div></div>
+      <div class="row"><span>隐私模式<small>退出时清除登录态与本地数据</small></span><div class="switch" id="swPrivacy" role="switch" aria-checked="false"></div></div>
+      <div class="row"><span>清除登录态<small>退出账号，需重新扫码</small></span><button class="danger" id="btnClear">清除</button></div>
+      <div class="hint">设置仅作用于本机 zerobili，不影响浏览器中的 B 站。</div>
     </div>
   </div>
   <div class="fill"></div>
@@ -126,6 +165,7 @@
     $('forward').onclick = () => api.navigate('forward');
     $('reload').onclick = () => api.navigate('reload');
     $('home').onclick = () => api.navigate('home');
+    $('newwin').onclick = () => api.newWindow();
 
     // 双击标题栏空白处最大化
     document.querySelector('.bar').addEventListener('dblclick', (e) => {
@@ -157,6 +197,51 @@
     api.onWinState(({ maximized }) => {
       $('max').title = maximized ? '还原' : '最大化';
     });
+
+    // 设置面板
+    const panel = $('settingsPanel');
+    const gear = $('settingsBtn');
+    const swRestore = $('swRestore');
+    const swPrivacy = $('swPrivacy');
+    const btnClear = $('btnClear');
+
+    function syncSettings() {
+      api.getSetting('restoreLast').then((v) => swRestore.classList.toggle('on', !!v));
+      api.getSetting('privacy').then((v) => swPrivacy.classList.toggle('on', !!v));
+    }
+    gear.onclick = (e) => {
+      e.stopPropagation();
+      const open = panel.classList.toggle('show');
+      api.setPanel(open ? panel.offsetHeight : 0); // 通知主进程让主视图下移避让
+      if (open) syncSettings();
+    };
+    document.addEventListener('click', (e) => {
+      if (panel.classList.contains('show') && !panel.contains(e.target) && e.target !== gear) {
+        panel.classList.remove('show');
+        api.setPanel(0);
+      }
+    });
+    swRestore.onclick = () => {
+      const on = !swRestore.classList.contains('on');
+      swRestore.classList.toggle('on', on);
+      api.setSetting('restoreLast', on);
+    };
+    swPrivacy.onclick = () => {
+      const on = !swPrivacy.classList.contains('on');
+      swPrivacy.classList.toggle('on', on);
+      api.setSetting('privacy', on);
+      if (on) alert('隐私模式已开启：下次退出时将清除登录态与本地数据。');
+    };
+    let clearing = false;
+    btnClear.onclick = async () => {
+      if (clearing) return;
+      if (!confirm('确定清除登录态？将退出当前 B 站账号，需重新扫码登录。')) return;
+      clearing = true;
+      btnClear.textContent = '清除中…';
+      await api.clearAuth();
+      btnClear.textContent = '已清除';
+      setTimeout(() => api.navigate('reload'), 500);
+    };
   </script>
 </body>
 </html>
