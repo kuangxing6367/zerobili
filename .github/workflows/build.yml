@@ -51,6 +51,10 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 默认是 "tools platform-tools"，但新版 SDK 仓库已删除 tools 包，
+          # sdkmanager tools 会直接退出 1。只装 platform-tools，其余用下面这步精确安装。
+          packages: 'platform-tools'
 
       - name: Install SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.1.0"
